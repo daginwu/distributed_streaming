@@ -1,7 +1,9 @@
 # distributed_streaming
+
 ## Architecture
 
 ## Adapter RESTful API 
+
 GET /users
 POST /users
 
