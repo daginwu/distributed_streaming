@@ -1,11 +1,11 @@
 package main
 
 import (
+	"distributed_streaming/cmd/persist/app/api"
+	keyvalue "distributed_streaming/pkg/badger"
+	"distributed_streaming/pkg/grpc"
 	"log"
 	"strings"
-
-	"distributed_streaming/cmd/persist/app/sub"
-	keyvalue "distributed_streaming/pkg/badger"
 
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
@@ -32,7 +32,8 @@ func main() {
 
 	app := fx.New(
 		keyvalue.Modual,
-		sub.Modual,
+		api.Modual,
+		grpc.Modual,
 	)
 
 	app.Run()

@@ -3,28 +3,34 @@ package api
 import (
 	"context"
 	"distributed_streaming/cmd/adapter/app/datatype/json"
+	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/spf13/viper"
 	"go.uber.org/fx"
 
-	cestan "github.com/cloudevents/sdk-go/protocol/stan/v2"
-	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/cloudevents/sdk-go/v2/client"
+	"google.golang.org/grpc"
 
 	uuid "github.com/satori/go.uuid"
-)
 
-var clientSet map[string]client.Client
+	pb "distributed_streaming/cmd/persist/app/datatype/pb"
+)
 
 var Modual = fx.Options(
 
-	fx.Provide(),
+	fx.Provide(
+		NewGrpcClient,
+	),
 	fx.Invoke(
 		InitAPI,
+		InitGrpcClient,
 	),
 )
+
+var client pb.PersistServiceClient
 
 func GetUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
@@ -44,19 +50,23 @@ func CreateUser(c *gin.Context) {
 
 	uid := uuid.Must(uuid.NewV4(), err)
 
-	EmitEvent(
-		clientSet["users"],
-		"adapter",
-		"create",
-		map[string]interface{}{
-			"uid":     uid.String(),
-			"name":    req.Name,
-			"balance": req.Balance,
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	r, err := client.CreateUser(
+		ctx,
+		&pb.CreateUserRequest{
+			Id:      uid.String(),
+			Name:    req.Name,
+			Balance: uint64(req.Balance),
 		},
 	)
+	if err != nil {
+		log.Println(err)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"eventType": "CreateUser",
+		"status":    r.GetReply(),
 		"payload": gin.H{
 			"uid": uid,
 		},
@@ -78,17 +88,6 @@ func UpdateUser(c *gin.Context) {
 		})
 	}
 
-	EmitEvent(
-		clientSet["users"],
-		"adapter",
-		"update",
-		map[string]interface{}{
-			"uid":     uid,
-			"name":    req.Name,
-			"balance": req.Balance,
-		},
-	)
-
 	c.JSON(http.StatusOK, gin.H{
 		"eventType": "UpdateUser",
 		"payload": gin.H{
@@ -100,15 +99,6 @@ func UpdateUser(c *gin.Context) {
 func DeleteUser(c *gin.Context) {
 
 	uid := c.Param("id")
-
-	EmitEvent(
-		clientSet["users"],
-		"adapter",
-		"delete",
-		map[string]interface{}{
-			"uid": uid,
-		},
-	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"eventType": " DeleteUser",
@@ -133,18 +123,7 @@ func CreateTxs(c *gin.Context) {
 	}
 
 	uid := uuid.Must(uuid.NewV4(), err)
-
-	EmitEvent(
-		clientSet["txs"],
-		"adapter",
-		"create",
-		map[string]interface{}{
-			"uid":   uid.String(),
-			"from":  req.From,
-			"to":    req.To,
-			"money": req.Money,
-		},
-	)
+	fmt.Println(uid)
 
 	c.JSON(http.StatusOK, gin.H{
 		"eventType": "CreateTx",
@@ -152,54 +131,26 @@ func CreateTxs(c *gin.Context) {
 	})
 }
 
-func NewStreamingClient(subject string) client.Client {
+func NewGrpcClient() *grpc.ClientConn {
 
-	var err error
-	clientID := uuid.Must(uuid.NewV4(), err)
-	s, err := cestan.NewSender(
-		"test-cluster",
-		clientID.String(),
-		subject,
-		cestan.StanOptions(),
+	conn, err := grpc.Dial(
+		viper.GetString("grpc.port"),
+		grpc.WithInsecure(),
+		grpc.WithBlock(),
 	)
 	if err != nil {
-		log.Println("failed to create protocol: %v", err)
+		log.Fatalf("did not connect: %v", err)
 	}
+	// defer conn.Close()
 
-	c, err := cloudevents.NewClient(
-		s,
-		cloudevents.WithTimeNow(),
-		cloudevents.WithUUIDs(),
-	)
-	if err != nil {
-		log.Println("failed to create client: %v", err)
-	}
-
-	return c
+	return conn
 }
 
-func EmitEvent(client client.Client, source string, eventType string, payload map[string]interface{}) {
-
-	e := cloudevents.NewEvent()
-	e.SetType(eventType)
-	e.SetSource(source)
-	_ = e.SetData(cloudevents.ApplicationJSON, payload)
-
-	if result := client.Send(context.Background(), e); cloudevents.IsUndelivered(result) {
-		log.Println("failed to send")
-	} else {
-		log.Println(cloudevents.IsACK(result))
-	}
+func InitGrpcClient(conn *grpc.ClientConn) {
+	client = pb.NewPersistServiceClient(conn)
 }
 
 func InitAPI(router *gin.Engine) {
-
-	clientSet = map[string]client.Client{
-		"users": NewStreamingClient("users"),
-		"txs":   NewStreamingClient("txs"),
-	}
-
-	log.Println(clientSet)
 
 	router.GET("/users", GetUsers)
 	router.POST("/users", CreateUser)

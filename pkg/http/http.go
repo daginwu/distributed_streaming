@@ -1,9 +1,10 @@
 package http
 
 import (
+	"context"
+
 	"go.uber.org/fx"
 
-	"context"
 	"log"
 	"net/http"
 
@@ -23,15 +24,13 @@ var Modual = fx.Options(
 
 func NewHTTPServer(lc fx.Lifecycle) *gin.Engine {
 
-	log.Println("[Distributed_Streaming] HTTP server start")
-
 	port := viper.GetString("http.port")
 	router := gin.Default()
 	server := &http.Server{
 		Addr:    port,
 		Handler: router,
 	}
-
+	log.Println("[Distributed_Streaming] HTTP server start " + port)
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			go server.ListenAndServe()

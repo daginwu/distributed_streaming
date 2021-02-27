@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package distributed_streaming.api.persist;
+
+service PersistService {
+    rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);
+    rpc UpdateUser (UpdateUserRequest) returns (UpdateUserResponse);
+    rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse);
+    rpc CreateTx (CreateTxRequest) returns (CreateTxResponse);
+  }
+
+message CreateUserRequest {
+    string id = 1;
+    string name = 2;
+    uint64 balance = 3;
+}
+  
+message CreateUserResponse {
+    string reply = 1;
+}
+
+message UpdateUserRequest {
+    string id = 1;
+    string name = 2;
+    uint64 balance = 3;
+}
+  
+message UpdateUserResponse {
+    string reply = 1;
+}
+
+message DeleteUserRequest {
+    string id = 1;
+}
+  
+message DeleteUserResponse {
+    string reply = 1;
+}
+
+message CreateTxRequest {
+    string from = 1;
+    string to = 2;
+    uint64 money = 3;
+}
+  
+message CreateTxResponse {
+    string reply = 1;
+}
